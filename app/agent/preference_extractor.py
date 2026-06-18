@@ -27,8 +27,11 @@ NOT stable preferences (do NOT extract these):
 - One-off questions ("What's the weather Saturday?")
 - Acknowledgements ("Sounds good", "Thanks")
 
-Return ONLY a JSON object: {"preferences": ["short fact 1", "short fact 2", ...]}
-If nothing stable was said, return {"preferences": []}.
+CRITICAL OUTPUT FORMAT:
+- Respond with EXACTLY one JSON object and NOTHING ELSE.
+- No prose before or after. No markdown fences. No explanation.
+- Schema: {"preferences": ["short fact 1", "short fact 2"]}
+- If nothing stable was said, respond with: {"preferences": []}
 
 Be conservative. It is better to miss a preference than to invent one."""
 
@@ -57,7 +60,12 @@ def extract_preferences(
             raw = raw.strip("`")
             if raw.lower().startswith("json"):
                 raw = raw[4:].strip()
-        data = json.loads(raw)
+        # Extract just the first JSON object if model adds trailing prose.
+        import re as _re
+        match = _re.search(r"\{.*?\}", raw, _re.DOTALL)
+        if not match:
+            return []
+        data = json.loads(match.group(0))
         prefs = data.get("preferences", [])
         return [p for p in prefs if isinstance(p, str) and len(p) <= 120]
     except Exception:  # noqa: BLE001

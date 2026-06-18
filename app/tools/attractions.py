@@ -1,16 +1,22 @@
-"""Attraction search tool. Day 1 returns mock data;
-Day 2 will retrieve from a FAISS index built over Wikipedia city pages.
-"""
+"""Attraction search tool — backed by per-city FAISS RAG over Wikipedia."""
+import logging
 from typing import Any
 
+from app.rag.store import CityVectorStore
 from app.tools.base import Tool
+
+logger = logging.getLogger(__name__)
 
 
 class AttractionsTool(Tool):
     name = "search_attractions"
     description = (
-        "Retrieve well-known attractions, neighbourhoods, or activities for a city. "
-        "Use this for sightseeing planning. Returns 5 attractions with short descriptions."
+        "Retrieve passages about attractions, neighbourhoods, food, and culture "
+        "for a city, grounded in Wikipedia. "
+        "Use this for sightseeing planning. "
+        "You can call this multiple times with different interest queries "
+        "(e.g. 'ramen shops', 'street photography spots', 'history museums') "
+        "to gather material for a personalised plan."
     )
     parameters_schema = {
         "type": "object",
@@ -19,24 +25,47 @@ class AttractionsTool(Tool):
             "interest": {
                 "type": "string",
                 "description": (
-                    "Optional interest filter, e.g. 'food', 'history', 'nightlife', "
-                    "'family-friendly'. Omit if user has no preference."
+                    "What aspect of the city to retrieve. Be specific: "
+                    "'ramen and izakaya', 'photography spots', "
+                    "'family-friendly museums', etc."
                 ),
             },
+            "top_k": {
+                "type": "integer",
+                "description": "How many passages to return (default 5, max 8).",
+            },
         },
-        "required": ["city"],
+        "required": ["city", "interest"],
     }
 
+    def __init__(self) -> None:
+        self._store = CityVectorStore()
+
     def run(self, **kwargs: Any) -> str:
-        city = kwargs.get("city", "unknown")
-        interest = kwargs.get("interest")
-        suffix = f" matching interest '{interest}'" if interest else ""
-        # MOCK — Day 2 swap with FAISS-backed Wikipedia retrieval.
-        return (
-            f"[MOCK] Top attractions in {city}{suffix}:\n"
-            f"1. Famous Landmark A — iconic spot, allow 2 hours.\n"
-            f"2. Neighbourhood B — walkable area, good for evenings.\n"
-            f"3. Museum C — best visited on weekday mornings.\n"
-            f"4. Local Eatery D — known for a regional dish.\n"
-            f"5. Park E — relaxing, central location."
-        )
+        city = kwargs.get("city", "").strip()
+        interest = kwargs.get("interest", "").strip()
+        top_k = min(int(kwargs.get("top_k", 5)), 8)
+
+        if not city or not interest:
+            return "ERROR: both 'city' and 'interest' are required."
+
+        try:
+            results = self._store.retrieve(city, interest, top_k=top_k)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Retrieval failed for city=%s interest=%s", city, interest)
+            return f"ERROR: attraction retrieval failed: {e}"
+
+        if not results:
+            return (
+                f"No Wikipedia content available for {city}. "
+                "Try web_search for current information instead."
+            )
+
+        lines = [f"Retrieved passages for '{interest}' in {city}:"]
+        for i, r in enumerate(results, start=1):
+            lines.append(
+                f"{i}. [{r.source_title}] (relevance {r.score:.2f})\n"
+                f"   {r.text}\n"
+                f"   Source: {r.source_url}"
+            )
+        return "\n".join(lines)

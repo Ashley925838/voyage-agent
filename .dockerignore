@@ -1,0 +1,13 @@
+.venv/
+.git/
+.gitignore
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+data/
+tests/
+scratch_*.py
+README.md
+ARCHITECTURE.md

@@ -1,4 +1,3 @@
-cat > Dockerfile << 'EOF'
 # syntax=docker/dockerfile:1.6
 
 # Build a slim CPU-only image. We avoid GPU torch wheels (would be ~2.5 GB).
@@ -32,4 +31,3 @@ ENV PORT=7860
 EXPOSE 7860
 
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
-EOF
